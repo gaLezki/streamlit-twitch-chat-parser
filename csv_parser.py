@@ -1,11 +1,12 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import time
 
 st.set_page_config(page_title="CSV Loader", layout="wide")
 
-st.title("📂 CSV Loader with Cache")
-
+st.title("📂 VOD Chat Analyzer")
+vod_id = st.number_input("Enter VOD id here for URL purposes", step=1, value=None, placeholder='VOD id')
 SLIDING_WINDOW = st.select_slider(
     "Select size of sliding window (s)",
     options=[
@@ -47,12 +48,22 @@ if uploaded_file is not None:
             filtered_df.loc[(df["Time"] >= t - SLIDING_WINDOW) & (filtered_df["Time"] <= t), "User"].nunique()
             for t in filtered_df["Time"]
         ]
-    st.line_chart(filtered_df, x='Time',
-                    y='UUIW',
-                    y_label=f'Unique users messaging during last {SLIDING_WINDOW}s')
-    
+
+    fig = go.Figure(data=[
+        go.Scatter(name='Unique chatters during window', x=filtered_df['Time'], y=filtered_df['UUIW'],
+            hovertemplate='Window: %{x}<br>Unique chatters: %{y}',
+            mode='lines',
+            line=dict(width=1)  # thinner line (default is 2)
+            )
+    ])
+
+    st.plotly_chart(fig, config = {'scrollZoom': False})
+
     timestamp = st.number_input(
         f"Show messages {SLIDING_WINDOW} seconds before this moment (s)", value=None, placeholder="Enter a number", step=1
     )
     if timestamp is not None:
+        vod_timestamp = time.strftime('%Hh%Mm%Ss', time.gmtime(timestamp-30))
+        if vod_id is not None:
+            st.page_link(f'https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}', label='Check time of VOD (-30s)')
         st.dataframe(data=filtered_df[(filtered_df['Time'] > (timestamp - SLIDING_WINDOW)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort"))
