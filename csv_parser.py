@@ -16,14 +16,14 @@ SLIDING_WINDOW = st.select_slider(
 
 # Apply filters to the DataFrame
 def apply_filters(df, filter_replies=True):
-    # Filter out rows with user_name "nightbot"
-    df = df[df['user_name'] != 'nightbot']
+    # Filter out rows with User "nightbot"
+    df = df[df['User'] != 'nightbot']
     
     # Filter out rows with messages starting with an exclamation mark or "@"
     if filter_replies == True:
-        df = df[~df['message'].str.startswith(('!', '@'), na=False)]
+        df = df[~df['Message'].str.startswith(('!', '@'), na=False)]
     else:
-        df = df[~df['message'].str.startswith(('!'), na=False)]
+        df = df[~df['Message'].str.startswith(('!'), na=False)]
     
     return df
 
@@ -37,20 +37,22 @@ if uploaded_file is not None:
     df = load_csv(uploaded_file)
     st.success("✅ File loaded and cached!")
 
-    values = st.slider("Select a time range for messages to be studied", df["time"].min(), df["time"].max(), (df["time"].min(), df["time"].max()))
-    df = df[(df['time'] > values[0]) & (df['time'] < values[1])]
+    df.rename(columns={'time': 'Time', 'user_name': 'User', 'message': 'Message'}, inplace=True)
+    values = st.slider("Select a time range for messages to be studied", df["Time"].min(), df["Time"].max(), (df["Time"].min(), df["Time"].max()))
+    df = df[(df['Time'] > values[0]) & (df['Time'] < values[1])]
 
-    filtered_df = apply_filters(df[['time', 'user_name', 'message']], filter_replies=True)    
+    filtered_df = apply_filters(df[['Time', 'User', 'Message']], filter_replies=True)    
     with st.spinner('Processing amounts of unique users within given sliding window'):
-        filtered_df["unique_users_in_window"] = [
-            filtered_df.loc[(df["time"] >= t - SLIDING_WINDOW) & (filtered_df["time"] <= t), "user_name"].nunique()
-            for t in filtered_df["time"]
+        filtered_df["UUIW"] = [
+            filtered_df.loc[(df["Time"] >= t - SLIDING_WINDOW) & (filtered_df["Time"] <= t), "User"].nunique()
+            for t in filtered_df["Time"]
         ]
-    with st.spinner('Drawing line chart'):
-        st.line_chart(filtered_df, x='time', y='unique_users_in_window')
-
+    st.line_chart(filtered_df, x='Time',
+                    y='UUIW',
+                    y_label=f'Unique users messaging during last {SLIDING_WINDOW}s')
+    
     timestamp = st.number_input(
-        f"Show messages {SLIDING_WINDOW} seconds before this moment (s)", value=None, placeholder="Enter a number"
+        f"Show messages {SLIDING_WINDOW} seconds before this moment (s)", value=None, placeholder="Enter a number", step=1
     )
     if timestamp is not None:
-        st.dataframe(data=filtered_df[(filtered_df['time'] > (timestamp - SLIDING_WINDOW)) & (filtered_df['time'] <= timestamp)].sort_values(by='time', ascending=True).sort_index(level=0, kind="mergesort"))
+        st.dataframe(data=filtered_df[(filtered_df['Time'] > (timestamp - SLIDING_WINDOW)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort"))
