@@ -9,14 +9,6 @@ st.set_page_config(page_title="CSV Loader", layout="wide")
 
 st.title("📂 VOD Chat Analyzer")
 
-SLIDING_WINDOW = st.select_slider(
-    "Select size of sliding window (s)",
-    options=[
-       6,7,8,9,10,11,12,13,14,15
-    ],
-    value=12
-)
-
 # Apply filters to the DataFrame
 def apply_filters(df, filter_replies=True):
     # Filter out rows with User "nightbot"
@@ -45,6 +37,12 @@ def format_messages(messages):
     messages = '<br>- '.join(messages_array)
     return messages
 
+def format_vod_timestamp_url(time_in_seconds):
+    vod_timestamp = time.strftime('%Hh%Mm%Ss', time.gmtime(time_in_seconds-30))
+    if vod_id is not None:
+        return f'https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}'
+    return None
+
 @st.cache_data
 def load_csv(file):
     return pd.read_csv(file, encoding='utf-8', on_bad_lines='warn')
@@ -61,14 +59,21 @@ if uploaded_file is not None:
     values = st.slider("Select a time range for messages to be studied", df["Time"].min(), df["Time"].max(), (df["Time"].min(), df["Time"].max()))
     df = df[(df['Time'] > values[0]) & (df['Time'] < values[1])]
 
-    filtered_df = apply_filters(df[['Time', 'User', 'Message']], filter_replies=True)    
-    with st.spinner('Processing amounts of unique users within given sliding window'):
+    filtered_df = apply_filters(df[['Time', 'User', 'Message']], filter_replies=True)
+    sliding_window = st.select_slider(
+        "Select size of sliding window (s)",options=[6,7,8,9,10,11,12,13,14,15],
+        value=12
+    )
+    ignore_threshold = st.select_slider(
+        "Ignore moments with less unique users than",options=list(range(0, 11)), value=0
+    )
+    with st.spinner('Processing amounts of unique users (and their messages) within given sliding window'):
         uuiw_counts = []
         uuiw_messages = []
 
         for t in filtered_df["Time"]:
             window = filtered_df.loc[
-                (filtered_df["Time"] >= t - SLIDING_WINDOW) & (filtered_df["Time"] <= t)
+                (filtered_df["Time"] >= t - sliding_window) & (filtered_df["Time"] <= t)
             ]
 
             # Count unique users
@@ -92,23 +97,44 @@ if uploaded_file is not None:
         filtered_df["UUIW"] = uuiw_counts
         filtered_df["UUIW_msgs"] = uuiw_messages
 
+    # Filter moments with less uuiw than given ignore_threshold
+    filtered_df = filtered_df[filtered_df['UUIW'] > ignore_threshold]
+
     filtered_df['MessagePeek'] = filtered_df['UUIW_msgs'].apply(format_messages)
-    fig = go.Figure(data=[
-        go.Scatter(name='Unique chatters during window', x=filtered_df['Time'], y=filtered_df['UUIW'],
-            hovertemplate='Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}',
-            customdata=filtered_df['MessagePeek'],
-            mode='lines',
-            line=dict(width=1)  # thinner line (default is 2)
-            )
-    ])
+    filtered_df['timestamp_url'] = filtered_df['Time'].apply(format_vod_timestamp_url)
+    chart_type = st.radio(
+        "Chart type",
+        ["Line", "Bar"],
+        index=0,
+    )
+    if chart_type == 'Line':
+        fig = go.Figure(data=[
+            go.Scatter(name='Unique chatters during window', x=filtered_df['Time'], y=filtered_df['UUIW'],
+                hovertemplate='Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}',
+                customdata=filtered_df['MessagePeek'],
+                mode='lines',
+                line=dict(width=1),
+                text=[f'<a href="{url}" target="_blank">{url}</a>' for url in filtered_df['timestamp_url']]
+                )
+        ])
+    elif chart_type == 'Bar':
+        fig = go.Figure(data=[
+            go.Bar(name='Unique chatters during window', x=filtered_df['Time'], y=filtered_df['UUIW'],
+                hovertemplate='Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}',
+                customdata=filtered_df['MessagePeek'],
+                text=[f'<a href="{url}" target="_blank">🔗 OPEN 🔗</a>' for url in filtered_df['timestamp_url']],
+                textposition='auto',
+                marker_color='purple'
+                )
+        ])
 
     st.plotly_chart(fig, config = {'scrollZoom': False})
 
     timestamp = st.number_input(
-        f"Show messages {SLIDING_WINDOW} seconds before this moment (s)", value=None, placeholder="Enter a number", step=1
+        f"Show messages {sliding_window} seconds before this moment (s)", value=None, placeholder="Enter a number", step=1
     )
     if timestamp is not None:
         vod_timestamp = time.strftime('%Hh%Mm%Ss', time.gmtime(timestamp-30))
         if vod_id is not None:
             st.page_link(f'https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}', label='Check time of VOD (-30s)')
-        st.dataframe(data=filtered_df[(filtered_df['Time'] > (timestamp - SLIDING_WINDOW)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort"))
+        st.dataframe(data=filtered_df[(filtered_df['Time'] > (timestamp - sliding_window)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort"))
