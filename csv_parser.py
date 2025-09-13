@@ -5,9 +5,10 @@ import time
 import os
 import re
 
-st.set_page_config(page_title="CSV Loader", layout="wide")
+st.set_page_config(page_title="Twitch VOD Chat Analyzer", layout="wide", page_icon='🔍')
 
-st.title("📂 VOD Chat Analyzer")
+st.title("🔍 VOD Chat Analyzer")
+
 
 # Apply filters to the DataFrame
 def apply_filters(df, filter_replies=True):
@@ -36,6 +37,9 @@ def format_messages(messages):
     messages_array = messages.split(' || ')[:30]
     messages = '<br>- '.join(messages_array)
     return messages
+
+def format_seconds_to_ts(seconds):
+    return time.strftime('%Hh%Mm%Ss', time.gmtime(seconds))
 
 def format_vod_timestamp_url(time_in_seconds):
     vod_timestamp = time.strftime('%Hh%Mm%Ss', time.gmtime(time_in_seconds-30))
@@ -102,6 +106,7 @@ if uploaded_file is not None:
 
     filtered_df['MessagePeek'] = filtered_df['UUIW_msgs'].apply(format_messages)
     filtered_df['timestamp_url'] = filtered_df['Time'].apply(format_vod_timestamp_url)
+    filtered_df['timestamp_url_md'] = '[🔗](' + filtered_df['timestamp_url'] + ')'
     chart_type = st.radio(
         "Chart type",
         ["Line", "Bar"],
@@ -137,4 +142,55 @@ if uploaded_file is not None:
         vod_timestamp = time.strftime('%Hh%Mm%Ss', time.gmtime(timestamp-30))
         if vod_id is not None:
             st.page_link(f'https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}', label='Check time of VOD (-30s)')
-        st.dataframe(data=filtered_df[(filtered_df['Time'] > (timestamp - sliding_window)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort"))
+        timestamp_df = filtered_df[(filtered_df['Time'] > (timestamp - sliding_window)) & (filtered_df['Time'] <= timestamp)].sort_values(by='Time', ascending=True).sort_index(level=0, kind="mergesort")
+        timestamp_df = timestamp_df[['Message', 'UUIW', 'UUIW_msgs', 'timestamp_url']]
+        st.dataframe(data=timestamp_df)
+
+    st.subheader('Get top moments of broadcast to a table')
+    SLACK = st.selectbox(
+        "The time difference between moments (s) at minimum",(30, 45, 60, 75, 90, 120)
+    )
+    TOP_N = st.selectbox(
+        "TOP N",(10, 25, 50, 100)
+    )
+
+    candidates = filtered_df.sort_values("UUIW", ascending=False).reset_index(drop=True)
+
+    chosen = []
+    for _, row in candidates.iterrows():
+        t = row["Time"]  # seconds
+
+        # check if this time is too close to any already chosen
+        if any(abs(t - prev["Time"]) <= SLACK for prev in chosen):
+            continue
+
+        chosen.append(row)
+
+        if len(chosen) >= TOP_N:
+            break
+    
+    top_peaks = pd.DataFrame(chosen)
+    top_df = top_peaks[["Time", "UUIW", "UUIW_msgs", "timestamp_url"]].copy()
+
+    # Turn the URL column into clickable links
+    top_df['Time'] = top_df['Time'].apply(
+        lambda x: format_seconds_to_ts(x)
+    )
+    top_df["timestamp_url"] = top_df["timestamp_url"].apply(
+        lambda x: f"<a href='{x}' target='_blank'>🔗</a>"
+    )
+
+    # Rename columns for nicer display (optional)
+    top_df = top_df.rename(columns={
+        "Time": "⏱️",
+        "UUIW": "Unique Users In Window",
+        "UUIW_msgs": "💌",
+        "timestamp_url": "🔗"
+    })
+    # Render as HTML so the <a> tags remain clickable
+    st.markdown(top_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+else:
+    st.markdown('''
+            1. Download and export Twitch VOD chat log with https://www.twitchchatdownloader.com/ 
+            2. Upload it here for analysis
+            ''')
