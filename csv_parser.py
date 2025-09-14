@@ -1,11 +1,12 @@
 import streamlit as st
 import plotly.graph_objects as go
+import html
 import pandas as pd
 import time
 import os
 import re
 
-st.set_page_config(page_title="Twitch VOD Chat Analyzer", layout="wide", page_icon='🔍')
+st.set_page_config(page_title="Twitch VOD Chat Peaks Analyzer", layout="wide", page_icon='🔍')
 
 st.title("🔍 VOD Chat Analyzer")
 
@@ -148,7 +149,9 @@ if uploaded_file is not None:
 
     st.subheader('Get top moments of broadcast to a table')
     SLACK = st.selectbox(
-        "The time difference between moments (s) at minimum",(30, 45, 60, 75, 90, 120)
+        "The time difference between top activity moments (s) at minimum to distinguish different situations from each other",
+        (30, 45, 60, 75, 90, 120),
+        index=5
     )
     TOP_N = st.selectbox(
         "TOP N",(10, 25, 50, 100)
@@ -179,7 +182,8 @@ if uploaded_file is not None:
     top_df["timestamp_url"] = top_df["timestamp_url"].apply(
         lambda x: f"<a href='{x}' target='_blank'>🔗</a>"
     )
-
+    # Escape all message text to be safe
+    top_df["UUIW_msgs"] = top_df["UUIW_msgs"].apply(lambda x: html.escape(str(x)))
     # Rename columns for nicer display (optional)
     top_df = top_df.rename(columns={
         "Time": "⏱️",
