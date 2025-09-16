@@ -23,7 +23,7 @@ if uploaded_file is not None:
     parser_vod_id = parse_vod_id(uploaded_file.name)
     st.success("✅ File loaded and cached!")
 
-    vod_id = st.number_input("Enter VOD id here for URL purposes", step=1, value=parser_vod_id)
+    vod_id = st.number_input("Enter VOD id here for URL purposes (if not fetched automatically from filename)", step=1, value=parser_vod_id)
 
     # Rename Twitch export columns
     df.rename(columns={"time": "Time", "user_name": "User", "message": "Message"}, inplace=True)
@@ -45,12 +45,18 @@ if uploaded_file is not None:
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
 
     # Chart
-    chart_type = st.radio("Chart type", ["Line", "Bar"], index=0)
-    fig = make_chart(filtered_df, chart_type)
+    hover_info = 'In desktop, you can see chat some messages of that moment by hovering the chart. Zoom in by drawing a rectangle in any area you want. Zoom out with double-click.'
+    chart_type = st.radio("Chart type", ["Bar", "Line"], index=0)
+    hide_empty = False
+    if chart_type == 'Bar':
+        hide_empty = st.checkbox('Hide empty seconds to bring the useful data points closer to each other')
+        hover_info = hover_info + ' After zooming in, you can open the VOD 30 seconds prior to that moment by clicking the URL in the bar.'
+    fig = make_chart(filtered_df, chart_type, hide_empty)        
+    st.info(hover_info, icon="ℹ️")
     st.plotly_chart(fig, config={"scrollZoom": False})
 
     # Timestamp inspection
-    timestamp = st.number_input(f"Show messages {sliding_window}s before this moment", step=1, value=None, placeholder="Enter a number")
+    timestamp = st.number_input(f"Show messages {sliding_window}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
     if timestamp is not None and vod_id is not None:
         vod_timestamp = time.strftime("%Hh%Mm%Ss", time.gmtime(timestamp - 30))
         st.page_link(f"https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}", label="Check VOD (-30s)")
@@ -69,6 +75,8 @@ if uploaded_file is not None:
     render_top_table(top_df)
 else:
     st.markdown("""
-    1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/)  
-    2. Upload the CSV here for analysis
+    1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/) using Export chat feature
+    2. Don't rename the downloaded CSV file, as the script identifies VOD id automatically            
+    3. Upload the CSV file here for analysis and change settings as you wish
+    4. If the VOD is still available, you'll get links to most chat-active parts of it
     """)

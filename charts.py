@@ -1,11 +1,11 @@
 import plotly.graph_objects as go
 
-def make_chart(df, chart_type):
+def make_chart(df, chart_type, hide_empty=False):
     if chart_type == "Line":
         return go.Figure(
             data=[
                 go.Scatter(
-                    name="Unique chatters",
+                    name="",
                     x=df["Time"],
                     y=df["UUIW"],
                     hovertemplate="Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}",
@@ -16,10 +16,10 @@ def make_chart(df, chart_type):
             ]
         )
     elif chart_type == "Bar":
-        return go.Figure(
+        fig = go.Figure(
             data=[
                 go.Bar(
-                    name="Unique chatters",
+                    name="",
                     x=df["Time"],
                     y=df["UUIW"],
                     hovertemplate="Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}",
@@ -33,3 +33,10 @@ def make_chart(df, chart_type):
                 )
             ]
         )
+        if hide_empty:
+            fig.update_xaxes(
+                type="category",  # treats x as discrete categories
+                categoryorder="array",
+                categoryarray=df["Time"]  # preserves order
+            )
+        return fig
