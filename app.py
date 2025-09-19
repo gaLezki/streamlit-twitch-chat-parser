@@ -1,13 +1,16 @@
 import streamlit as st
 import pandas as pd
+import polars as pl
 import time
 
 from data_utils import load_csv, parse_vod_id, apply_filters
 from processing import (
     compute_sliding_windows,
+    add_sliding_window_lazy,
     format_vod_timestamp_url,
     format_seconds_to_ts,
-    get_top_peaks
+    get_top_peaks,
+    format_messages
 )
 from charts import make_chart
 from tables import render_top_table
@@ -40,7 +43,10 @@ if uploaded_file is not None:
     ignore_threshold = st.select_slider("Ignore moments with less unique users than", options=list(range(0, 11)), value=0)
 
     with st.spinner("Processing sliding windows..."):
-        filtered_df = compute_sliding_windows(filtered_df, sliding_window)
+        # filtered_df = compute_sliding_windows(filtered_df, sliding_window)
+        filtered_pl_df = pl.from_pandas(filtered_df)
+        filtered_df = add_sliding_window_lazy(filtered_pl_df, sliding_window).to_pandas()
+        filtered_df["MessagePeek"] = filtered_df["UUIW_msgs"].apply(format_messages)
         filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
 
