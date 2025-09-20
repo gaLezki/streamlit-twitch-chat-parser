@@ -17,22 +17,21 @@ def make_chart(df, chart_type, hide_empty=False):
         )
     elif chart_type == "Bar":
         fig = go.Figure(
-            data=[
-                go.Bar(
-                    name="",
-                    x=df["Time"],
-                    y=df["UUIW"],
-                    hovertemplate="Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}",
-                    customdata=df["MessagePeek"],
-                    text=[
-                        f"<a href='{url}' target='_blank'>🔗 OPEN 🔗</a>"
-                        for url in df["timestamp_url"]
-                    ],
-                    textposition="auto",
-                    marker_color="purple",
-                )
-            ]
+            go.Bar(
+                name="",
+                x=df["Time"],
+                y=df["UUIW"],
+                hovertemplate="Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}",
+                customdata=df["MessagePeek"],
+                text=[
+                    f"<a href='{url}' target='_blank'>🔗 OPEN 🔗</a>"
+                    for url in df["timestamp_url"]
+                ],
+                textposition="auto",
+                marker_color="purple",
+            )
         )
+        fig.update_layout(barmode="overlay")
         if hide_empty:
             fig.update_xaxes(
                 type="category",  # treats x as discrete categories

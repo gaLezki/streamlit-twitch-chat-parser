@@ -47,55 +47,69 @@ def compute_sliding_windows(df, sliding_window):
 
     return df
 
-def add_sliding_window_lazy(df: pl.DataFrame, window_size: int) -> pl.DataFrame:
-    # Make a datetime column for rolling windows
-    lf = df.lazy().with_columns(
-        (pl.col("Time") * 1_000_000_000).cast(pl.Datetime("ns")).alias("Time_dt")
-    )
+def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i") -> pl.DataFrame:
+    """
+    Returns a polars.DataFrame with added columns:
+      - UUIW (unique users in window [t-window_size, t])
+      - UUIW_msgs (one message per user joined with " || ")
+      - MessagePeek (first up to 30 msgs, each truncated to 30 chars, joined with '<br>- ')
+    """
 
-    # Unique users per window
+    # ensure cols exist
+    assert {"Time", "User", "Message"}.issubset(set(df.columns)), "Require Time, User, Message columns"
+
+    lf = df.lazy()
+
+    # unique users per sliding window (exclude null/empty users)
     uuiw = (
         lf.group_by_dynamic(
-            index_column="Time_dt",
-            every=f"{window_size}s",
-            period=f"{window_size}s",
-            closed="right",
+            index_column="Time",
+            every=every,
+            period=f"{window_size}i",
+            closed="both",
         )
-        .agg(pl.col("User").n_unique().alias("UUIW"))
+        .agg(
+            # drop null/empty before counting
+            pl.col("User").drop_nulls().filter(pl.col("User") != "").n_unique().alias("UUIW")
+        )
     )
-
-    # Concatenate one message per user per window
+    # one message per user per window (first message for that user in that window), then concat per window
     msgs = (
         lf.group_by_dynamic(
-            index_column="Time_dt",
-            every=f"{window_size}s",
-            period=f"{window_size}s",
-            closed="right",
+            index_column="Time",
+            every=every,
+            period=f"{window_size}i",
+            closed="both",
             by="User",
         )
         .agg(pl.col("Message").first().alias("Msg"))
-        .group_by("Time_dt")
+        .group_by("Time")
         .agg(pl.col("Msg").str.concat(" || ").alias("UUIW_msgs"))
     )
 
-    lf.with_columns(
-        pl.col("UUIW_msgs")
-        .str.split(" || ")                      # split into list
-        .list.slice(0, 30)                      # take first 30
-        .list.eval(pl.element().str.slice(0, 30))  # truncate each element to 30 chars
-        .list.join("<br>- ")                    # join with line breaks
-        .alias("MessagePeek")
+    out_lf = (
+        lf.join(uuiw, on="Time", how="left")
+          .join(msgs, on="Time", how="left")
+          .with_columns([
+              pl.col("UUIW").fill_null(0).cast(pl.Int64),
+              pl.col("UUIW_msgs").fill_null("").alias("UUIW_msgs"),
+              # MessagePeek lazy construction
+              pl.when(pl.col("UUIW_msgs") == "")
+                .then(pl.lit(""))
+                .otherwise(
+                    pl.col("UUIW_msgs")
+                      .str.split(" || ")
+                      .list.slice(0, 30)                          # first 30 messages
+                      .list.eval(pl.element().str.slice(0, 30))   # truncate each to 30 chars
+                      .list.join("<br>- ")                        # join for tooltip
+                ).alias("MessagePeek")
+          ])
     )
+    result_df = out_lf.collect()
+    print('result_df: ', result_df.tail(50)) # debug
+    #.drop("Time_dt")
 
-    # Join everything back
-    result = (
-        lf.join(uuiw, on="Time_dt", how="left")
-          .join(msgs, on="Time_dt", how="left")
-          .drop("Time_dt")
-          .collect()
-    )
-
-    return result
+    return result_df
 
 
 def get_top_peaks(df, slack, n):

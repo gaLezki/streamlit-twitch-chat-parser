@@ -5,8 +5,8 @@ import time
 
 from data_utils import load_csv, parse_vod_id, apply_filters
 from processing import (
-    compute_sliding_windows,
     add_sliding_window_lazy,
+    compute_sliding_windows,
     format_vod_timestamp_url,
     format_seconds_to_ts,
     get_top_peaks,
@@ -43,12 +43,16 @@ if uploaded_file is not None:
     ignore_threshold = st.select_slider("Ignore moments with less unique users than", options=list(range(0, 11)), value=0)
 
     with st.spinner("Processing sliding windows..."):
-        # filtered_df = compute_sliding_windows(filtered_df, sliding_window)
+        # Polars
         filtered_pl_df = pl.from_pandas(filtered_df)
-        filtered_df = add_sliding_window_lazy(filtered_pl_df, sliding_window).to_pandas()
-        filtered_df["MessagePeek"] = filtered_df["UUIW_msgs"].apply(format_messages)
+        filtered_pl_df = add_sliding_window_lazy(filtered_pl_df, sliding_window).to_pandas()
+        filtered_pl_df = filtered_pl_df[filtered_pl_df["UUIW"] > ignore_threshold]
+        filtered_pl_df["timestamp_url"] = filtered_pl_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
+        # Pandas
+        filtered_df = compute_sliding_windows(filtered_df, sliding_window)
         filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
+
 
     # Chart
     hover_info = 'In desktop, you can see chat some messages of that moment by hovering the chart. Zoom in by drawing a rectangle in any area you want. Zoom out with double-click.'
@@ -57,9 +61,11 @@ if uploaded_file is not None:
     if chart_type == 'Bar':
         hide_empty = st.checkbox('Hide empty seconds to bring the useful data points closer to each other')
         hover_info = hover_info + ' After zooming in, you can open the VOD 30 seconds prior to that moment by clicking the URL in the bar.'
-    fig = make_chart(filtered_df, chart_type, hide_empty)        
+    fig = make_chart(filtered_df, chart_type, hide_empty)
+    fig2 = make_chart(filtered_pl_df, chart_type, hide_empty)
     st.info(hover_info, icon="ℹ️")
-    st.plotly_chart(fig, config={"scrollZoom": False})
+    st.plotly_chart(fig, config={"scrollZoom": False}, key=1)
+    st.plotly_chart(fig2, config={"scrollZoom": False}, key=2)
 
     # Timestamp inspection
     timestamp = st.number_input(f"Show messages {sliding_window}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
@@ -69,8 +75,13 @@ if uploaded_file is not None:
 
         timestamp_df = filtered_df[
             (filtered_df["Time"] > (timestamp - sliding_window)) & (filtered_df["Time"] <= timestamp)
-        ][["Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
+        ][["Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
         st.dataframe(timestamp_df)
+
+        timestamp_df_pl = filtered_pl_df[
+            (filtered_pl_df["Time"] > (timestamp - sliding_window)) & (filtered_pl_df["Time"] <= timestamp)
+        ][["Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
+        st.dataframe(timestamp_df_pl)
 
     # Top peaks table
     st.subheader("Get top broadcast moments")

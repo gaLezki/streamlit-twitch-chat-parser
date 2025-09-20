@@ -1,4 +1,5 @@
 import pandas as pd
+import polars as pl
 import streamlit as st
 import os
 import re
@@ -16,6 +17,10 @@ def parse_vod_id(filename):
     match = re.search(r"(\d+)", basename)
     return int(match.group(1)) if match else None
 
-@st.cache_data
+# @st.cache_data
 def load_csv(file):
-    return pd.read_csv(file, encoding="utf-8", on_bad_lines="warn")
+    return pd.read_csv(file, encoding="utf-8", on_bad_lines="skip")
+
+# @st.cache_data
+# def load_csv(file) -> pl.DataFrame:
+#     return pl.read_csv(file, )
