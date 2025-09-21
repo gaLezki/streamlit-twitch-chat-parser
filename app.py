@@ -6,6 +6,7 @@ import time
 from data_utils import load_csv, parse_vod_id, apply_filters
 from processing import (
     add_sliding_window_lazy,
+    add_sliding_window_lazy_with_rolling,
     compute_sliding_windows,
     format_vod_timestamp_url,
     format_seconds_to_ts,
@@ -45,7 +46,7 @@ if uploaded_file is not None:
     with st.spinner("Processing sliding windows..."):
         # Polars
         filtered_pl_df = pl.from_pandas(filtered_df)
-        filtered_pl_df = add_sliding_window_lazy(filtered_pl_df, sliding_window).to_pandas()
+        filtered_pl_df = add_sliding_window_lazy_with_rolling(filtered_pl_df, sliding_window).to_pandas()
         filtered_pl_df = filtered_pl_df[filtered_pl_df["UUIW"] > ignore_threshold]
         filtered_pl_df["timestamp_url"] = filtered_pl_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
         # Pandas
@@ -74,13 +75,13 @@ if uploaded_file is not None:
         st.page_link(f"https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}", label="Check VOD (-30s)")
 
         timestamp_df = filtered_df[
-            (filtered_df["Time"] > (timestamp - sliding_window)) & (filtered_df["Time"] <= timestamp)
-        ][["Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
+            (filtered_df["Time"] >= (timestamp - sliding_window)) & (filtered_df["Time"] <= (timestamp + sliding_window))
+        ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
         st.dataframe(timestamp_df)
 
         timestamp_df_pl = filtered_pl_df[
-            (filtered_pl_df["Time"] > (timestamp - sliding_window)) & (filtered_pl_df["Time"] <= timestamp)
-        ][["Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
+            (filtered_pl_df["Time"] >= (timestamp - sliding_window)) & (filtered_pl_df["Time"] <= (timestamp + sliding_window))
+        ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
         st.dataframe(timestamp_df_pl)
 
     # Top peaks table
@@ -90,6 +91,8 @@ if uploaded_file is not None:
 
     top_df = get_top_peaks(filtered_df, SLACK, TOP_N)
     render_top_table(top_df)
+    top_pl_df = get_top_peaks(filtered_pl_df, SLACK, TOP_N)
+    render_top_table(top_pl_df)
 else:
     st.markdown("""
     1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/) using Export chat feature

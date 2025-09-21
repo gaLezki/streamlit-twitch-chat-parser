@@ -47,6 +47,54 @@ def compute_sliding_windows(df, sliding_window):
 
     return df
 
+def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> pl.DataFrame:
+    """
+    Use LazyFrame.rolling() for sliding windows matching pandas [t - window_size, t] behavior.
+    Adds columns UUIW, UUIW_msgs, MessagePeek.
+    """
+
+    # Ensure df has needed cols
+    assert {"Time", "User", "Message"}.issubset(set(df.columns)), "Need Time, User, Message"
+
+    lf = df.lazy()
+    
+    rolled = (
+        lf.rolling(index_column="Time", period=f"{window_size}i", closed="both")
+        .agg([
+            pl.col("User").n_unique().alias("UUIW"),
+            pl.col("Message").first().alias("FirstMsg"),
+        ])
+    )
+
+    # Collapse per-time duplicates (aggregate messages + keep UUIW)
+    rolled = (
+        rolled.group_by("Time")
+        .agg([
+            pl.col("UUIW").max(),  # just take max, they’re the same within each Time
+            pl.col("FirstMsg").str.concat(" || ").alias("UUIW_msgs"),
+        ])
+    )
+
+    out_lf = (
+        lf.join(rolled, on="Time", how="left")
+        .with_columns([
+            pl.col("UUIW").fill_null(0).cast(pl.Int64),
+            pl.col("UUIW_msgs").fill_null(""),
+            pl.when(pl.col("UUIW_msgs") == "")
+              .then(pl.lit(""))
+              .otherwise(
+                  pl.col("UUIW_msgs")
+                    .str.split(" || ")
+                    .list.slice(0, 30)
+                    .list.eval(pl.element().str.slice(0, 30))
+                    .list.join("<br>- ")
+              )
+              .alias("MessagePeek"),
+        ])
+    )
+
+    return out_lf.collect()
+
 def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i") -> pl.DataFrame:
     """
     Returns a polars.DataFrame with added columns:
@@ -67,10 +115,11 @@ def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i
             every=every,
             period=f"{window_size}i",
             closed="both",
+            offset=f"-{10*window_size}i",
+            start_by='window'
         )
         .agg(
-            # drop null/empty before counting
-            pl.col("User").drop_nulls().filter(pl.col("User") != "").n_unique().alias("UUIW")
+            pl.col("User").n_unique().alias("UUIW")
         )
     )
     # one message per user per window (first message for that user in that window), then concat per window
@@ -81,6 +130,8 @@ def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i
             period=f"{window_size}i",
             closed="both",
             by="User",
+            offset=f"-{10*window_size}i",
+            start_by='window'
         )
         .agg(pl.col("Message").first().alias("Msg"))
         .group_by("Time")
@@ -106,7 +157,6 @@ def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i
           ])
     )
     result_df = out_lf.collect()
-    print('result_df: ', result_df.tail(50)) # debug
     #.drop("Time_dt")
 
     return result_df
