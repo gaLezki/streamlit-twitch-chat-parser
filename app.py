@@ -45,15 +45,10 @@ if uploaded_file is not None:
 
     with st.spinner("Processing sliding windows..."):
         # Polars
-        filtered_pl_df = pl.from_pandas(filtered_df)
-        filtered_pl_df = add_sliding_window_lazy_with_rolling(filtered_pl_df, sliding_window).to_pandas()
-        filtered_pl_df = filtered_pl_df[filtered_pl_df["UUIW"] > ignore_threshold]
-        filtered_pl_df["timestamp_url"] = filtered_pl_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
-        # Pandas
-        filtered_df = compute_sliding_windows(filtered_df, sliding_window)
+        filtered_df = pl.from_pandas(filtered_df)
+        filtered_df = add_sliding_window_lazy_with_rolling(filtered_df, sliding_window).to_pandas()
         filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
-
 
     # Chart
     hover_info = 'In desktop, you can see chat some messages of that moment by hovering the chart. Zoom in by drawing a rectangle in any area you want. Zoom out with double-click.'
@@ -63,10 +58,8 @@ if uploaded_file is not None:
         hide_empty = st.checkbox('Hide empty seconds to bring the useful data points closer to each other')
         hover_info = hover_info + ' After zooming in, you can open the VOD 30 seconds prior to that moment by clicking the URL in the bar.'
     fig = make_chart(filtered_df, chart_type, hide_empty)
-    fig2 = make_chart(filtered_pl_df, chart_type, hide_empty)
     st.info(hover_info, icon="ℹ️")
     st.plotly_chart(fig, config={"scrollZoom": False}, key=1)
-    st.plotly_chart(fig2, config={"scrollZoom": False}, key=2)
 
     # Timestamp inspection
     timestamp = st.number_input(f"Show messages {sliding_window}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
@@ -79,11 +72,6 @@ if uploaded_file is not None:
         ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
         st.dataframe(timestamp_df)
 
-        timestamp_df_pl = filtered_pl_df[
-            (filtered_pl_df["Time"] >= (timestamp - sliding_window)) & (filtered_pl_df["Time"] <= (timestamp + sliding_window))
-        ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
-        st.dataframe(timestamp_df_pl)
-
     # Top peaks table
     st.subheader("Get top broadcast moments")
     SLACK = st.selectbox("Time difference between peaks (s)", (30, 45, 60, 75, 90, 120), index=5)
@@ -91,8 +79,6 @@ if uploaded_file is not None:
 
     top_df = get_top_peaks(filtered_df, SLACK, TOP_N)
     render_top_table(top_df)
-    top_pl_df = get_top_peaks(filtered_pl_df, SLACK, TOP_N)
-    render_top_table(top_pl_df)
 else:
     st.markdown("""
     1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/) using Export chat feature

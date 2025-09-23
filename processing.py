@@ -62,7 +62,7 @@ def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> 
         lf.rolling(index_column="Time", period=f"{window_size}i", closed="both")
         .agg([
             pl.col("User").n_unique().alias("UUIW"),
-            pl.col("Message").first().alias("FirstMsg"),
+            pl.col("Message").str.concat(" || ").alias("UUIW_msgs")
         ])
     )
 
@@ -71,7 +71,7 @@ def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> 
         rolled.group_by("Time")
         .agg([
             pl.col("UUIW").max(),  # just take max, they’re the same within each Time
-            pl.col("FirstMsg").str.concat(" || ").alias("UUIW_msgs"),
+            pl.col("UUIW_msgs").max()
         ])
     )
 
