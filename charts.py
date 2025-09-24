@@ -19,7 +19,7 @@ def make_chart(df, chart_type, hide_empty=False):
         fig = go.Figure(
             go.Bar(
                 name="",
-                x=df["Time"],
+                x=df["Time"].astype('string'),
                 y=df["UUIW"],
                 hovertemplate="Window: %{x}<br>Unique chatters: %{y}<br>Messages:<br>%{customdata}",
                 customdata=df["MessagePeek"],

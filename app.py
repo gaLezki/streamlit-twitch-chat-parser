@@ -30,14 +30,15 @@ if uploaded_file is not None:
     vod_id = st.number_input("Enter VOD id here for URL purposes (if not fetched automatically from filename)", step=1, value=parser_vod_id)
 
     # Rename Twitch export columns
-    df.rename(columns={"time": "Time", "user_name": "User", "message": "Message"}, inplace=True)
+    df = df.rename({"time": "Time", "user_name": "User", "message": "Message"})
 
     # Time filtering
     values = st.slider("Select a time range", df["Time"].min(), df["Time"].max(), (df["Time"].min(), df["Time"].max()))
-    df = df[(df["Time"] > values[0]) & (df["Time"] < values[1])]
+    df = df.filter(pl.col('Time') > values[0], pl.col('Time') < values[1])
+    # df = df[(df["Time"] > values[0]) & (df["Time"] < values[1])]
 
     # Apply filters
-    filtered_df = apply_filters(df[["Time", "User", "Message"]])
+    filtered_df = apply_filters(df)
 
     # Sliding window
     sliding_window = st.select_slider("Sliding window (s)", options=list(range(6, 16)), value=12)
@@ -45,9 +46,8 @@ if uploaded_file is not None:
 
     with st.spinner("Processing sliding windows..."):
         # Polars
-        filtered_df = pl.from_pandas(filtered_df)
-        filtered_df = add_sliding_window_lazy_with_rolling(filtered_df, sliding_window).to_pandas()
-        filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
+        filtered_df = add_sliding_window_lazy_with_rolling(filtered_df, sliding_window, ignore_threshold).to_pandas()
+        # filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
 
     # Chart

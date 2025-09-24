@@ -47,7 +47,7 @@ def compute_sliding_windows(df, sliding_window):
 
     return df
 
-def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> pl.DataFrame:
+def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int, ignore_threshold: int = 0) -> pl.DataFrame:
     """
     Use LazyFrame.rolling() for sliding windows matching pandas [t - window_size, t] behavior.
     Adds columns UUIW, UUIW_msgs, MessagePeek.
@@ -65,7 +65,7 @@ def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> 
             pl.col("Message").str.concat(" || ").alias("UUIW_msgs")
         ])
     )
-
+    
     # Collapse per-time duplicates (aggregate messages + keep UUIW)
     rolled = (
         rolled.group_by("Time")
@@ -74,7 +74,7 @@ def add_sliding_window_lazy_with_rolling(df: pl.DataFrame, window_size: int) -> 
             pl.col("UUIW_msgs").max()
         ])
     )
-
+    rolled = (rolled.filter(pl.col('UUIW') >= ignore_threshold))
     out_lf = (
         lf.join(rolled, on="Time", how="left")
         .with_columns([
@@ -157,8 +157,6 @@ def add_sliding_window_lazy(df: pl.DataFrame, window_size: int, every: str = "1i
           ])
     )
     result_df = out_lf.collect()
-    #.drop("Time_dt")
-
     return result_df
 
 
@@ -167,8 +165,8 @@ def get_top_peaks(df, slack, n):
     chosen = []
 
     for _, row in candidates.iterrows():
-        t = row["Time"]
-        if any(abs(t - prev["Time"]) <= slack for prev in chosen):
+        t = int(row["Time"])
+        if any(abs(t - int(prev["Time"])) <= slack for prev in chosen):
             continue
         chosen.append(row)
         if len(chosen) >= n:
