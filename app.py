@@ -5,8 +5,8 @@ import time
 
 from data_utils import load_csv, parse_vod_id, apply_filters
 from processing import (
-    add_sliding_window_lazy,
-    add_sliding_window_lazy_with_rolling,
+    add_sliding_windows,
+    add_tumbling_window,
     compute_sliding_windows,
     format_vod_timestamp_url,
     format_seconds_to_ts,
@@ -40,14 +40,23 @@ if uploaded_file is not None:
     # Apply filters
     filtered_df = apply_filters(df)
 
-    # Sliding window
-    sliding_window = st.select_slider("Sliding window (s)", options=list(range(6, 16)), value=12)
+    window_type = st.radio(
+        "Windowing function",
+        ["Tumbling", "Sliding"],
+        captions=[
+            "Faster but less accurate: Doesn't necessarily get the best peaks if messages spread across two windows, as windows are static (e.g. 0-12s, 12-24s and so on).",
+            "Slower, but more accurate: Window is calculated for every second there is a message."
+        ], index=0
+    )    
+    window_size = st.select_slider("Sliding window (s)", options=list(range(6, 16)), value=12)
     ignore_threshold = st.select_slider("Ignore moments with less unique users than", options=list(range(0, 11)), value=0)
 
     with st.spinner("Processing sliding windows..."):
         # Polars
-        filtered_df = add_sliding_window_lazy_with_rolling(filtered_df, sliding_window, ignore_threshold).to_pandas()
-        # filtered_df = filtered_df[filtered_df["UUIW"] > ignore_threshold]
+        if window_type == 'Tumbling':
+            filtered_df = add_sliding_windows(filtered_df, window_size, ignore_threshold).to_pandas()
+        else:
+            filtered_df = add_tumbling_window(filtered_df, window_size, ignore_threshold).to_pandas()
         filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
 
     # Chart
@@ -62,13 +71,13 @@ if uploaded_file is not None:
     st.plotly_chart(fig, config={"scrollZoom": False}, key=1)
 
     # Timestamp inspection
-    timestamp = st.number_input(f"Show messages {sliding_window}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
+    timestamp = st.number_input(f"Show messages {window_size}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
     if timestamp is not None and vod_id is not None:
         vod_timestamp = time.strftime("%Hh%Mm%Ss", time.gmtime(timestamp - 30))
         st.page_link(f"https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}", label="Check VOD (-30s)")
 
         timestamp_df = filtered_df[
-            (filtered_df["Time"] >= (timestamp - sliding_window)) & (filtered_df["Time"] <= (timestamp + sliding_window))
+            (filtered_df["Time"] >= (timestamp - window_size)) & (filtered_df["Time"] <= (timestamp + window_size))
         ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
         st.dataframe(timestamp_df)
 
