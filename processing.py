@@ -75,7 +75,8 @@ def add_sliding_windows(df: pl.DataFrame, window_size: int, ignore_threshold: in
             pl.col("UUIW_msgs").max()
         ])
     )
-    rolled = (rolled.filter(pl.col('UUIW') >= ignore_threshold))
+
+    
     out_lf = (
         lf.join(rolled, on="Time", how="left")
         .with_columns([
@@ -93,6 +94,7 @@ def add_sliding_windows(df: pl.DataFrame, window_size: int, ignore_threshold: in
               .alias("MessagePeek"),
         ])
     )
+    out_lf = (out_lf.filter(pl.col('UUIW') >= ignore_threshold))
     out_lf = out_lf.select(['Time', 'UUIW', 'UUIW_msgs', 'MessagePeek'])
     return out_lf.collect()
 
@@ -130,7 +132,7 @@ def add_tumbling_window(df: pl.DataFrame, window_size: int, ignore_threshold: in
         ((pl.col("window_id") + 1) * window_size - 1).alias("window_end"),
     ])
 
-    result = (result.filter(pl.col('UUIW') >= ignore_threshold))
+    
     result = result.with_columns([
             pl.col("UUIW").fill_null(0).cast(pl.Int64),
             pl.col("UUIW_msgs").fill_null(""),
@@ -145,7 +147,7 @@ def add_tumbling_window(df: pl.DataFrame, window_size: int, ignore_threshold: in
               )
               .alias("MessagePeek"),
         ])
-    
+    result = (result.filter(pl.col('UUIW') >= ignore_threshold))
     result = result.rename({'window_start': 'Time'}).select(['Time', 'UUIW', 'UUIW_msgs', 'MessagePeek'])
     
     return result.collect().sort("Time")

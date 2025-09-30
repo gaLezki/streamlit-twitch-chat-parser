@@ -32,6 +32,8 @@ if uploaded_file is not None:
     # Rename Twitch export columns
     df = df.rename({"time": "Time", "user_name": "User", "message": "Message"})
 
+    status_container = st.status("Processing csv with given parameters...", expanded=True)
+
     # Time filtering
     values = st.slider("Select a time range", df["Time"].min(), df["Time"].max(), (df["Time"].min(), df["Time"].max()))
     df = df.filter(pl.col('Time') > values[0], pl.col('Time') < values[1])
@@ -51,43 +53,37 @@ if uploaded_file is not None:
     window_size = st.select_slider("Sliding window (s)", options=list(range(6, 16)), value=12)
     ignore_threshold = st.select_slider("Ignore moments with less unique users than", options=list(range(0, 11)), value=0)
 
-    with st.spinner("Processing sliding windows..."):
-        # Polars
-        if window_type == 'Tumbling':
-            filtered_df = add_sliding_windows(filtered_df, window_size, ignore_threshold).to_pandas()
-        else:
-            filtered_df = add_tumbling_window(filtered_df, window_size, ignore_threshold).to_pandas()
-        filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
+    
+    status_container.update(state='running', label='Calculating unique nicknames within given time', expanded=True)
+    perf_time_start = time.perf_counter()
+    if window_type == 'Sliding':
+        filtered_df = add_sliding_windows(filtered_df, window_size, ignore_threshold=ignore_threshold).to_pandas()
+    else:
+        filtered_df = add_tumbling_window(filtered_df, window_size, ignore_threshold=ignore_threshold).to_pandas()
+    perf_time_end = time.perf_counter()
+    status_container.update(state='running', label=f'Calculation of unique nicknames within given window took {round(perf_time_end - perf_time_start, 2)} seconds.', expanded=True)
+    filtered_df["timestamp_url"] = filtered_df["Time"].apply(lambda t: format_vod_timestamp_url(t, vod_id))
+    filtered_df['Timestamp'] = filtered_df["Time"].apply(lambda t: format_seconds_to_ts(t))
 
-    # Chart
+
     hover_info = 'In desktop, you can see chat some messages of that moment by hovering the chart. Zoom in by drawing a rectangle in any area you want. Zoom out with double-click.'
     chart_type = st.radio("Chart type", ["Bar", "Line"], index=0)
-    hide_empty = False
     if chart_type == 'Bar':
-        hide_empty = st.checkbox('Hide empty seconds to bring the useful data points closer to each other')
         hover_info = hover_info + ' After zooming in, you can open the VOD 30 seconds prior to that moment by clicking the URL in the bar.'
-    fig = make_chart(filtered_df, chart_type, hide_empty)
+    status_container.update(state='running', label=f'Drawing {chart_type} chart.', expanded=True)
+    fig = make_chart(filtered_df, chart_type)
     st.info(hover_info, icon="ℹ️")
-    st.plotly_chart(fig, config={"scrollZoom": False}, key=1)
-
-    # Timestamp inspection
-    timestamp = st.number_input(f"Show messages {window_size}s before this moment (e.g. 12345)", step=1, value=None, placeholder="Enter a number")
-    if timestamp is not None and vod_id is not None:
-        vod_timestamp = time.strftime("%Hh%Mm%Ss", time.gmtime(timestamp - 30))
-        st.page_link(f"https://www.twitch.tv/videos/{vod_id}?t={vod_timestamp}", label="Check VOD (-30s)")
-
-        timestamp_df = filtered_df[
-            (filtered_df["Time"] >= (timestamp - window_size)) & (filtered_df["Time"] <= (timestamp + window_size))
-        ][["User","Time","Message", "UUIW", "UUIW_msgs", "timestamp_url"]]
-        st.dataframe(timestamp_df)
+    st.plotly_chart(fig, config={"scrollZoom": False})
 
     # Top peaks table
     st.subheader("Get top broadcast moments")
     SLACK = st.selectbox("Time difference between peaks (s)", (30, 45, 60, 75, 90, 120), index=5)
     TOP_N = st.selectbox("TOP N", (10, 25, 50, 100))
 
+    status_container.update(state='running', label=f'Building table for top {TOP_N} unique nickname peaks within {window_size} seconds, at least {SLACK} seconds apart from each other.', expanded=True)
     top_df = get_top_peaks(filtered_df, SLACK, TOP_N)
     render_top_table(top_df)
+    status_container.update(state='complete', label='✅ All ready!', expanded=True)
 else:
     st.markdown("""
     1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/) using Export chat feature
