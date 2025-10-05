@@ -31,13 +31,11 @@ if uploaded_file is not None:
 
     # Rename Twitch export columns
     df = df.rename({"time": "Time", "user_name": "User", "message": "Message"})
-
     status_container = st.status("Processing csv with given parameters...", expanded=True)
 
     # Time filtering
     values = st.slider("Select a time range", df["Time"].min(), df["Time"].max(), (df["Time"].min(), df["Time"].max()))
     df = df.filter(pl.col('Time') > values[0], pl.col('Time') < values[1])
-    # df = df[(df["Time"] > values[0]) & (df["Time"] < values[1])]
 
     # Apply filters
     filtered_df = apply_filters(df)
@@ -50,7 +48,7 @@ if uploaded_file is not None:
             "Slower, but more accurate: Window is calculated for every second there is a message."
         ], index=0
     )    
-    window_size = st.select_slider("Sliding window (s)", options=list(range(6, 16)), value=12)
+    window_size = st.select_slider("Window size (s)", options=list(range(6, 16)), value=12)
     ignore_threshold = st.select_slider("Ignore moments with less unique users than", options=list(range(0, 11)), value=0)
 
     
@@ -86,8 +84,11 @@ if uploaded_file is not None:
     status_container.update(state='complete', label='✅ All ready!', expanded=True)
 else:
     st.markdown("""
-    1. Download Twitch VOD chat with [twitchchatdownloader.com](https://www.twitchchatdownloader.com/) using Export chat feature
-    2. Don't rename the downloaded CSV file, as the script identifies VOD id automatically            
-    3. Upload the CSV file here for analysis and change settings as you wish
-    4. If the VOD is still available, you'll get links to most chat-active parts of it
+    1. Insert Twitch VOD url to [twitchchatdownloader.com](https://www.twitchchatdownloader.com/), 
+                press **Download chat** and then use **Export chat** feature to download it as csv file.
+                **Do not rename** the CSV file, as the script identifies VOD id automatically from default file name.         
+    2. Upload the CSV file here for analysis and change settings as you wish.
+    3. If the VOD is still available, you'll get links to most chat-active parts of it.
+                
+    Note: If file is bigger than 1000KB I have no idea if it works
     """)
