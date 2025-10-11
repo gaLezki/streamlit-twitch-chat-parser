@@ -7,11 +7,10 @@ from data_utils import load_csv, parse_vod_id, apply_filters
 from processing import (
     add_sliding_windows,
     add_tumbling_window,
-    compute_sliding_windows,
+    compute_sliding_windows, # legacy function, might use later, might delete
     format_vod_timestamp_url,
     format_seconds_to_ts,
-    get_top_peaks,
-    format_messages
+    get_top_peaks
 )
 from charts import make_chart
 from tables import render_top_table
@@ -20,11 +19,19 @@ st.set_page_config(page_title="Twitch VOD Chat Peaks Analyzer", layout="wide", p
 
 st.title("🔍 VOD Chat Analyzer")
 
+use_demo = False
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
-
-if uploaded_file is not None:
+if uploaded_file is None:
+    use_demo = st.toggle('Show demo?')
+if use_demo and uploaded_file is None:
+    file_name = 'twitch-chat-2587926699.csv'
+    df = pl.read_csv(file_name, encoding="utf8-lossy", truncate_ragged_lines=True)
+elif not use_demo and uploaded_file is not None:
+    file_name = uploaded_file.name
     df = load_csv(uploaded_file)
-    parser_vod_id = parse_vod_id(uploaded_file.name)
+
+if use_demo or uploaded_file is not None:
+    parser_vod_id = parse_vod_id(file_name)
     st.success("✅ File loaded and cached!")
 
     vod_id = st.number_input("Enter VOD id here for URL purposes (if not fetched automatically from filename)", step=1, value=parser_vod_id)
