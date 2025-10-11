@@ -24,7 +24,7 @@ def make_chart(df, chart_type):
                 hovertemplate="Unique chatters: %{y}<br>Message preview:<br>%{customdata}",
                 customdata=df["MessagePeek"].str.split("<br>").str[:50].str.join("<br>"),
                 text=[
-                    f"<a href='{url}' target='_blank'>🔗 OPEN 🔗</a>"
+                    f"<a href='{url}' target='_blank'>🔗🔗🔗🔗</a>"
                     for url in df["timestamp_url"]
                 ],
                 textposition="outside",
