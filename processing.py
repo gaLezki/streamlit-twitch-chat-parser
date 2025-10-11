@@ -89,7 +89,7 @@ def add_sliding_windows(df: pl.DataFrame, window_size: int, ignore_threshold: in
                     .str.split(" || ")
                     .list.slice(0, 30)
                     .list.eval(pl.element().str.slice(0, 30))
-                    .list.join("<br>- ")
+                    .list.join("<br>")
               )
               .alias("MessagePeek"),
         ])
